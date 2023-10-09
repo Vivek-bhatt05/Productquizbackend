@@ -8,6 +8,7 @@ const User = require('./user')
 const cors = require('cors');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
+const authenticateMiddleware = require('./middleware');
 
 
 
@@ -28,8 +29,31 @@ mongoose.connect(mongoDbUri, { useNewUrlParser: true, useUnifiedTopology: true }
 app.use(bodyParser.json());
 
 // Define a route to handle quiz responses
-app.post('/api/userresponses', (req, res) => {
+// app.post('/api/userresponses', (req, res) => {
+//   const { question, selectedOption } = req.body;
+
+//   if (!question || selectedOption === undefined) {
+//     return res.status(400).json({ message: 'Invalid request' });
+//   }
+
+//   const response = new Response({
+//     question,
+//     selectedOption,
+//   });
+
+//   response.save()
+//     .then(savedResponse => {
+//       res.status(201).json({ message: 'Response saved successfully', savedResponse });
+//     })
+//     .catch(err => {
+//       console.error('Error saving response:', err);
+//       res.status(500).json({ message: 'Error saving response' });
+//     });
+// });
+
+app.post('/api/userresponses', authenticateMiddleware, (req, res) => {
   const { question, selectedOption } = req.body;
+  const userId = req.user._id; // Get the user ID from the authenticated user
 
   if (!question || selectedOption === undefined) {
     return res.status(400).json({ message: 'Invalid request' });
@@ -38,6 +62,7 @@ app.post('/api/userresponses', (req, res) => {
   const response = new Response({
     question,
     selectedOption,
+    userId, // Include the user's ID in the response
   });
 
   response.save()
@@ -50,42 +75,82 @@ app.post('/api/userresponses', (req, res) => {
     });
 });
 
-app.get('/api/userresponses', async (req, res) => {
-    try {
-      // Fetch all user responses from the database
-      const userResponses = await Response.find({});
-      res.status(200).json(userResponses);
-    } catch (error) {
-      console.error('Error fetching user responses:', error);
-      res.status(500).json({ message: 'Error fetching user responses' });
-    }
-  });
+// app.get('/api/userresponses', async (req, res) => {
+//     try {
+//       // Fetch all user responses from the database
+//       const userResponses = await Response.find({});
+//       res.status(200).json(userResponses);
+//     } catch (error) {
+//       console.error('Error fetching user responses:', error);
+//       res.status(500).json({ message: 'Error fetching user responses' });
+//     }
+//   });
 
-app.patch('/api/userresponses/:question', async (req, res) => {
-    try {
-      const { question } = req.params;
-      const { selectedOption, correctOption } = req.body;
+app.get('/api/userresponses', authenticateMiddleware, async (req, res) => {
+  const userId = req.user._id; // Get the user ID from the authenticated user
+  try {
+    // Fetch user-specific responses from the database
+    const userResponses = await Response.find({ userId });
+    res.status(200).json(userResponses);
+  } catch (error) {
+    console.error('Error fetching user responses:', error);
+    res.status(500).json({ message: 'Error fetching user responses' });
+  }
+});
+
+// app.patch('/api/userresponses/:question', async (req, res) => {
+//     try {
+//       const { question } = req.params;
+//       const { selectedOption, correctOption } = req.body;
   
-      // Find the existing response by the question
-      const existingResponse = await Response.findOne({ question });
+//       // Find the existing response by the question
+//       const existingResponse = await Response.findOne({ question });
   
-      if (!existingResponse) {
-        return res.status(404).json({ message: 'Response not found' });
-      }
+//       if (!existingResponse) {
+//         return res.status(404).json({ message: 'Response not found' });
+//       }
   
-      // Update the selectedOption and correctOption
-      existingResponse.selectedOption = selectedOption;
-      existingResponse.correctOption = correctOption;
+//       // Update the selectedOption and correctOption
+//       existingResponse.selectedOption = selectedOption;
+//       existingResponse.correctOption = correctOption;
   
-      // Save the updated response
-      await existingResponse.save();
+//       // Save the updated response
+//       await existingResponse.save();
   
-      res.status(200).json({ message: 'Response updated successfully' });
-    } catch (error) {
-      console.error('Error:', error);
-      res.status(500).json({ message: 'Internal server error' });
+//       res.status(200).json({ message: 'Response updated successfully' });
+//     } catch (error) {
+//       console.error('Error:', error);
+//       res.status(500).json({ message: 'Internal server error' });
+//     }
+//   });
+
+// Modify the patch endpoint to include user authentication
+app.patch('/api/userresponses/:question', authenticateMiddleware, async (req, res) => {
+  try {
+    const { question } = req.params;
+    const { selectedOption, correctOption } = req.body;
+    const userId = req.user._id; // Get the user's ID from the authenticated user
+
+    // Find the existing response by the question and user
+    const existingResponse = await Response.findOne({ question, userId });
+
+    if (!existingResponse) {
+      return res.status(404).json({ message: 'Response not found' });
     }
-  });
+
+    // Update the selectedOption and correctOption
+    existingResponse.selectedOption = selectedOption;
+    existingResponse.correctOption = correctOption;
+
+    // Save the updated response
+    await existingResponse.save();
+
+    res.status(200).json({ message: 'Response updated successfully' });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
 
 app.post('/api/usecases', async (req, res) => {
     try {
@@ -167,7 +232,7 @@ app.post('/api/usecases', async (req, res) => {
       }
   
       // Generate a JWT token for authentication
-      const token = jwt.sign({ userId: user._id }, 'YOUR_SECRET_KEY', {
+      const token = jwt.sign({ userId: user._id }, 'hello', {
         expiresIn: '1h', // Token expires in 1 hour (adjust as needed)
       });
   
